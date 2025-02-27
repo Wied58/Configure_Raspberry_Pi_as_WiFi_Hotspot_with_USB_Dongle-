@@ -1,6 +1,6 @@
 ---
 - name: Configure Raspberry Pi as WiFi Hotspot with USB Dongle
-  hosts: localhost
+  hosts: all
   become: yes
   vars:
     home_wifi_ssid: "{{ lookup('env', 'HOME_WIFI_SSID') }}"
