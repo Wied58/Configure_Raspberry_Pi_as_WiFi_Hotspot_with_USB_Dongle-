@@ -1,12 +1,20 @@
 ---
 - name: Configure Raspberry Pi as WiFi Hotspot with USB Dongle
-  hosts: all
+  hosts: localhost
   become: yes
-  vars:
-    home_wifi_ssid: "{{ lookup('env', 'HOME_WIFI_SSID') }}"
-    home_wifi_password: "{{ lookup('env', 'HOME_WIFI_PASSWORD') }}"
-    hotspot_ssid: "PiHotspot"
-    hotspot_password: "HotspotPassword"
+  vars_prompt:
+    - name: home_ssid
+      prompt: "Enter your home WiFi SSID"
+      private: no
+    - name: home_psk
+      prompt: "Enter your home WiFi Password"
+      private: yes
+    - name: hotspot_ssid
+      prompt: "Enter your Hotspot SSID"
+      private: no
+    - name: hotspot_psk
+      prompt: "Enter your Hotspot Password"
+      private: yes
 
   tasks:
     - name: Install required packages
@@ -14,29 +22,16 @@
         name:
           - hostapd
           - dnsmasq
+          - iptables
+          - rfkill
         state: present
 
-    - name: Configure wpa_supplicant for home WiFi on wlan0
-      copy:
-        dest: /etc/wpa_supplicant/wpa_supplicant.conf
-        content: |
-          country=US
-          ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-          update_config=1
-
-          network={
-              ssid="{{ home_wifi_ssid }}"
-              psk="{{ home_wifi_password }}"
-              key_mgmt=WPA-PSK
-          }
-      notify: Restart networking
-
-    - name: Configure DHCP for wlan1 (hotspot)
+    - name: Configure DHCP for hotspot
       copy:
         dest: /etc/dnsmasq.conf
         content: |
           interface=wlan1
-          dhcp-range=192.168.50.10,192.168.50.100,255.255.255.0,24h
+          dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
       notify: Restart dnsmasq
 
     - name: Configure hostapd for hotspot
@@ -52,47 +47,52 @@
           auth_algs=1
           ignore_broadcast_ssid=0
           wpa=2
-          wpa_passphrase={{ hotspot_password }}
+          wpa_passphrase={{ hotspot_psk }}
           wpa_key_mgmt=WPA-PSK
           rsn_pairwise=CCMP
       notify: Restart hostapd
 
-    - name: Enable IP forwarding
+    - name: Set systemd service for hostapd
       lineinfile:
-        path: /etc/sysctl.conf
-        line: 'net.ipv4.ip_forward=1'
-        state: present
-      notify: Apply sysctl changes
+        path: /etc/default/hostapd
+        regexp: '^DAEMON_CONF='
+        line: 'DAEMON_CONF="/etc/hostapd/hostapd.conf"'
+      notify: Restart hostapd
 
     - name: Configure NAT routing
-      blockinfile:
-        path: /etc/rc.local
-        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+      copy:
+        dest: /etc/systemd/system/nat-routing.service
         content: |
-          iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-          iptables -A FORWARD -i wlan0 -o wlan1 -m state --state RELATED,ESTABLISHED -j ACCEPT
-          iptables -A FORWARD -i wlan1 -o wlan0 -j ACCEPT
-      notify: Apply iptables rules
+          [Unit]
+          Description=Enable NAT Routing
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+          RemainAfterExit=true
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload systemd
+
+    - name: Enable NAT routing service
+      systemd:
+        name: nat-routing
+        enabled: yes
+        state: started
 
   handlers:
-    - name: Restart networking
-      systemd:
-        name: networking
-        state: restarted
-
     - name: Restart dnsmasq
-      systemd:
+      service:
         name: dnsmasq
         state: restarted
 
     - name: Restart hostapd
-      systemd:
+      service:
         name: hostapd
         state: restarted
 
-    - name: Apply sysctl changes
-      command: sysctl -p
-
-    - name: Apply iptables rules
-      command: iptables-save > /etc/iptables.rules
+    - name: Reload systemd
+      command: systemctl daemon-reload
 
