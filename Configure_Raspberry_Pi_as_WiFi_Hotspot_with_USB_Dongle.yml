@@ -26,6 +26,9 @@
           - rfkill
         state: present
 
+    - name: Unmask hostapd
+      command: systemctl unmask hostapd
+
     - name: Configure DHCP for hotspot
       copy:
         dest: /etc/dnsmasq.conf
