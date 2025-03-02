@@ -1,119 +1,71 @@
----
-- name: Configure Raspberry Pi as WiFi Hotspot with USB Dongle
-  hosts: localhost
+- name: Configure systemd-networkd and nftables
+  hosts: raspberry_pi
   become: yes
-#  vars_prompt:
-#    - name: home_ssid
-#      prompt: "Enter your home WiFi SSID"
-#      private: no
-#    - name: home_psk
-#      prompt: "Enter your home WiFi Password"
-#      private: yes
-#    - name: hotspot_ssid
-#      prompt: "Enter your Hotspot SSID"
-#      private: no
-#    - name: hotspot_psk
-#      prompt: "Enter your Hotspot Password"
-#      private: yes
-
   tasks:
-    - name: Install required packages
-      apt:
-        name:
-          - hostapd
-          - dnsmasq
-          - iptables
-          - rfkill
-        state: present
-
-    - name: Unmask hostapd
-      command: systemctl unmask hostapd
-
+    # Ensure systemd-networkd is installed and enabled
     - name: Ensure systemd-networkd is enabled
       systemd:
         name: systemd-networkd
         enabled: yes
         state: started
 
+    # Configure static IP for wlan1
     - name: Set up wlan1 network configuration
       copy:
         dest: /etc/systemd/network/10-wlan1.network
         content: |
           [Match]
           Name=wlan1
-    
+
           [Network]
           Address=192.168.4.1/24
           DHCPServer=yes
       notify: Restart systemd-networkd
 
-    - name: Configure DHCP for hotspot
-      copy:
-        dest: /etc/dnsmasq.conf
-        content: |
-          interface=wlan1
-          dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
-      notify: Restart dnsmasq
+    # Install nftables
+    - name: Install nftables
+      apt:
+        name: nftables
+        state: present
 
-    - name: Configure hostapd for hotspot
-      copy:
-        dest: /etc/hostapd/hostapd.conf
-        content: |
-          interface=wlan1
-          ssid=pihotspot
-          hw_mode=g
-          channel=7
-          wmm_enabled=0
-          macaddr_acl=0
-          auth_algs=1
-          ignore_broadcast_ssid=0
-          wpa=2
-          wpa_passphrase=hotspot1
-          wpa_key_mgmt=WPA-PSK
-          rsn_pairwise=CCMP
-      notify: Restart hostapd
-
-    - name: Set systemd service for hostapd
-      lineinfile:
-        path: /etc/default/hostapd
-        regexp: '^DAEMON_CONF='
-        line: 'DAEMON_CONF="/etc/hostapd/hostapd.conf"'
-      notify: Restart hostapd
-
-    - name: Configure NAT routing
-      copy:
-        dest: /etc/systemd/system/nat-routing.service
-        content: |
-          [Unit]
-          Description=Enable NAT Routing
-          After=network.target
-
-          [Service]
-          Type=oneshot
-          ExecStart=/sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-          RemainAfterExit=true
-
-          [Install]
-          WantedBy=multi-user.target
-      notify: Reload systemd
-
-    - name: Enable NAT routing service
+    # Enable and start nftables service
+    - name: Enable and start nftables service
       systemd:
-        name: nat-routing
+        name: nftables
         enabled: yes
         state: started
 
+    # Deploy nftables configuration
+    - name: Deploy nftables configuration
+      copy:
+        dest: /etc/nftables.conf
+        content: |
+          table inet nat {
+              chain postrouting {
+                  type nat hook postrouting priority 100; policy accept;
+                  oifname "eth0" masquerade
+              }
+          }
+
+          table inet filter {
+              chain forward {
+                  type filter hook forward priority 0; policy drop;
+                  iifname "wlan1" oifname "eth0" accept
+                  iifname "eth0" oifname "wlan1" accept
+              }
+          }
+      notify: Restart nftables
+
   handlers:
-    - name: Restart dnsmasq
-      service:
-        name: dnsmasq
+    # Handler to restart systemd-networkd
+    - name: Restart systemd-networkd
+      systemd:
+        name: systemd-networkd
         state: restarted
 
-    - name: Restart hostapd
-      service:
-        name: hostapd
+    # Handler to restart nftables
+    - name: Restart nftables
+      systemd:
+        name: nftables
         state: restarted
-
-    - name: Reload systemd
-      command: systemctl daemon-reload
 
