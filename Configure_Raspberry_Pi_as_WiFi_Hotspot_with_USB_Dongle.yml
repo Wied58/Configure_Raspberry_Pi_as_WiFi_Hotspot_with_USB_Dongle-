@@ -42,8 +42,7 @@
         dest: /etc/hostapd/hostapd.conf
         content: |
           interface=wlan1
-          #ssid={{ hotspot_ssid }}
-          ssid="pihotspot"
+          ssid=pihotspot
           hw_mode=g
           channel=7
           wmm_enabled=0
