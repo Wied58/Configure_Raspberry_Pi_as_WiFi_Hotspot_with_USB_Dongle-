@@ -50,7 +50,7 @@
           auth_algs=1
           ignore_broadcast_ssid=0
           wpa=2
-          wpa_passphrase=hotspot
+          wpa_passphrase=hotspot1
           wpa_key_mgmt=WPA-PSK
           rsn_pairwise=CCMP
       notify: Restart hostapd
