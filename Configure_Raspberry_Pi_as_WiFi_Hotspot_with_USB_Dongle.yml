@@ -29,6 +29,24 @@
     - name: Unmask hostapd
       command: systemctl unmask hostapd
 
+    - name: Ensure systemd-networkd is enabled
+      systemd:
+        name: systemd-networkd
+        enabled: yes
+        state: started
+
+    - name: Set up wlan1 network configuration
+      copy:
+        dest: /etc/systemd/network/10-wlan1.network
+        content: |
+          [Match]
+          Name=wlan1
+    
+          [Network]
+          Address=192.168.4.1/24
+          DHCPServer=yes
+      notify: Restart systemd-networkd
+
     - name: Configure DHCP for hotspot
       copy:
         dest: /etc/dnsmasq.conf
