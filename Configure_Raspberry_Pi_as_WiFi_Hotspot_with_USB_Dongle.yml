@@ -1,5 +1,5 @@
 - name: Configure systemd-networkd and nftables
-  hosts: raspberry_pi
+  hosts: all
   become: yes
   tasks:
     # Ensure systemd-networkd is installed and enabled
