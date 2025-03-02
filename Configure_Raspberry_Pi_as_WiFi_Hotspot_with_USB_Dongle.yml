@@ -2,19 +2,19 @@
 - name: Configure Raspberry Pi as WiFi Hotspot with USB Dongle
   hosts: localhost
   become: yes
-  vars_prompt:
-    - name: home_ssid
-      prompt: "Enter your home WiFi SSID"
-      private: no
-    - name: home_psk
-      prompt: "Enter your home WiFi Password"
-      private: yes
-    - name: hotspot_ssid
-      prompt: "Enter your Hotspot SSID"
-      private: no
-    - name: hotspot_psk
-      prompt: "Enter your Hotspot Password"
-      private: yes
+#  vars_prompt:
+#    - name: home_ssid
+#      prompt: "Enter your home WiFi SSID"
+#      private: no
+#    - name: home_psk
+#      prompt: "Enter your home WiFi Password"
+#      private: yes
+#    - name: hotspot_ssid
+#      prompt: "Enter your Hotspot SSID"
+#      private: no
+#    - name: hotspot_psk
+#      prompt: "Enter your Hotspot Password"
+#      private: yes
 
   tasks:
     - name: Install required packages
@@ -42,7 +42,8 @@
         dest: /etc/hostapd/hostapd.conf
         content: |
           interface=wlan1
-          ssid={{ hotspot_ssid }}
+          #ssid={{ hotspot_ssid }}
+          ssid="pihotspot"
           hw_mode=g
           channel=7
           wmm_enabled=0
@@ -50,7 +51,8 @@
           auth_algs=1
           ignore_broadcast_ssid=0
           wpa=2
-          wpa_passphrase={{ hotspot_psk }}
+          #wpa_passphrase={{ hotspot_psk }}
+          wpa_passphrase="hotspot"
           wpa_key_mgmt=WPA-PSK
           rsn_pairwise=CCMP
       notify: Restart hostapd
